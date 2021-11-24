@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "EKS Cluster Create"
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Project Name Prefix
+        Parameters:
+          - NamePrefix
+      - Label:
+          default: EKS Cluster Configuration
+        Parameters:
+          - EKSClusterName
+          # - EKSClusterSecurityGroupId1
+          # - EKSClusterSubnetId1
+          # - EKSClusterSubnetId2
+          # - EKSClusterSubnetId3
+          # - EKSClusterSubnetId4
+          - EKSVersion
+
+Parameters:
+  NamePrefix:
+    Type: String
+  EKSClusterName:
+    Description: "Same as EKSClusterName which you input in VPC template."
+    Type: String
+  # EKSClusterSecurityGroupId1:
+  #   Type: String
+  # EKSClusterSubnetId1:
+  #   Type: String
+  # EKSClusterSubnetId2:
+  #   Type: String
+  # EKSClusterSubnetId3:
+  #   Type: String
+  # EKSClusterSubnetId4:
+  #   Type: String
+  EKSVersion:
+    Type: String
+    Default: "1.20"
+
+Resources:
+  ClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${NamePrefix}-EKSCluster-Role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "eks.amazonaws.com"
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+        - "arn:aws:iam::aws:policy/AmazonEKSServicePolicy"
+      Path: "/"
+
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Ref EKSClusterName
+      ResourcesVpcConfig:
+        SecurityGroupIds:
+          - { "Fn::ImportValue": !Sub "${PJPrefix}-SecurityGroupEKS" }
+        SubnetIds:
+          - { "Fn::ImportValue": !Sub "${PJPrefix}-public-subnet-a" }
+          - { "Fn::ImportValue": !Sub "${PJPrefix}-public-subnet-c" }
+          - { "Fn::ImportValue": !Sub "${PJPrefix}-private-subnet-a" }
+          - { "Fn::ImportValue": !Sub "${PJPrefix}-private-subnet-c" }
+      RoleArn: !GetAtt ClusterRole.Arn
+      Version: !Ref EKSVersion
+
+Outputs:
+  EKSClusterRoleArn:
+    Value: !GetAtt ClusterRole.Arn
+  EKSClusterName:
+    Value: !Ref EKSCluster
+

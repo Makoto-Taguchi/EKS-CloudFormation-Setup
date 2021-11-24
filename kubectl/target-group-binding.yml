@@ -1,0 +1,18 @@
+apiVersion: elbv2.k8s.aws/v1alpha1
+kind: TargetGroupBinding
+metadata:
+  name: sample-tgb
+  namespace: sample-ns
+spec:
+  serviceRef:
+    name: service-sample-nginx
+    port: 80
+  targetGroupARN: <your targetGroup ARN>
+  targetType: ip
+  networking:
+    ingress:
+    - from:
+      - securityGroup:
+          groupID: <your securityGroupALB Id>
+      ports:
+      - protocol: TCP

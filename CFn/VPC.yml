@@ -1,0 +1,347 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "VPC and Subnet Create"
+
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: "Project Name Prefix"
+        Parameters:
+          - PJPrefix
+      - Label:
+          default: "EKS Information"
+        Parameters:
+          - EKSClusterName
+      - Label:
+          default: "Network Configuration"
+        Parameters:
+          - VPCCIDR
+          - PublicSubnetACIDR
+          - PublicSubnetCCIDR
+          - PrivateSubnetACIDR
+          - PrivateSubnetCCIDR
+
+Parameters:
+  PJPrefix:
+    Type: String
+  EKSClusterName:
+    Type: String
+  VPCCIDR:
+    Type: String
+    Default: "10.1.0.0/16"
+  PublicSubnetACIDR:
+    Type: String
+    Default: "10.1.0.0/24"
+  PublicSubnetCCIDR:
+    Type: String
+    Default: "10.1.8.0/24"
+  PrivateSubnetACIDR:
+    Type: String
+    Default: "10.1.104.0/24"
+  PrivateSubnetCCIDR:
+    Type: String
+    Default: "10.1.112.0/24"
+
+Resources:
+# ------------------------------------------------------------#
+#  VPC
+# ------------------------------------------------------------#
+# VPC Create
+  VPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      EnableDnsSupport: "true"
+      EnableDnsHostnames: "true"
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Sub "${PJPrefix}-vpc"
+
+# InternetGateway Create
+  InternetGateway:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${PJPrefix}-igw"
+
+# IGW Attach
+  InternetGatewayAttachment:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+# ------------------------------------------------------------#
+#  Subnet
+# ------------------------------------------------------------#
+# Public SubnetA Create
+  PublicSubnetA:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: "ap-northeast-1a"
+      CidrBlock: !Ref PublicSubnetACIDR
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${PJPrefix}-public-subnet-a
+        - Key: !Sub kubernetes.io/cluster/${EKSClusterName}
+          Value: owned
+        - Key: kubernetes.io/role/elb
+          Value: "1"
+
+# Public SubnetC Create
+  PublicSubnetC:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: "ap-northeast-1c"
+      CidrBlock: !Ref PublicSubnetCCIDR
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${PJPrefix}-public-subnet-c
+        - Key: !Sub kubernetes.io/cluster/${EKSClusterName}
+          Value: owned
+        - Key: kubernetes.io/role/elb
+          Value: "1"
+
+# Private SubnetA Create
+  PrivateSubnetA:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: "ap-northeast-1a"
+      CidrBlock: !Ref PrivateSubnetACIDR
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${PJPrefix}-private-subnet-a
+        - Key: !Sub kubernetes.io/cluster/${EKSClusterName}
+          Value: owned
+
+# Private SubnetC Create
+  PrivateSubnetC: 
+    Type: "AWS::EC2::Subnet"
+    Properties: 
+      AvailabilityZone: "ap-northeast-1c"
+      CidrBlock: !Ref PrivateSubnetCCIDR
+      VpcId: !Ref VPC 
+      Tags: 
+        - Key: Name
+          Value: !Sub ${PJPrefix}-private-subnet-c
+        - Key: !Sub kubernetes.io/cluster/${EKSClusterName}
+          Value: owned
+
+# ------------------------------------------------------------#
+#  RouteTable
+# ------------------------------------------------------------#
+# Public RouteTableCreate
+  PublicRouteTable: 
+    Type: "AWS::EC2::RouteTable"
+    Properties: 
+      VpcId: !Ref VPC 
+      Tags: 
+        - Key: Name
+          Value: !Sub "${PJPrefix}-public-route"
+
+# Private RouteTable Create
+  PrivateRouteTable: 
+    Type: "AWS::EC2::RouteTable"
+    Properties: 
+      VpcId: !Ref VPC 
+      Tags: 
+        - Key: Name
+          Value: !Sub "${PJPrefix}-private-route"
+
+# ------------------------------------------------------------#
+# Routing
+# ------------------------------------------------------------#
+# PublicRoute Create
+  PublicRoute:
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref InternetGateway
+
+  EKSRoute:
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NATGateway1
+
+# ------------------------------------------------------------#
+# RouteTable Associate
+# ------------------------------------------------------------# 
+# PublicRouteTable Associate SubnetA
+  PublicSubnetARouteTableAssociation: 
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties: 
+      SubnetId: !Ref PublicSubnetA 
+      RouteTableId: !Ref PublicRouteTable
+
+# PublicRouteTable Associate SubnetC
+  PublicSubnetCRouteTableAssociation: 
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties: 
+      SubnetId: !Ref PublicSubnetC 
+      RouteTableId: !Ref PublicRouteTable
+
+# PrivateRouteTable Associate SubnetA
+  PrivateSubnetARouteTableAssociation: 
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties: 
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+
+# PrivateRouteTable Associate SubnetC
+  PrivateSubnetCRouteTableAssociation: 
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties: 
+      SubnetId: !Ref PrivateSubnetC
+      RouteTableId: !Ref PrivateRouteTable
+
+# ------------------------------------------------------------#
+# Security Group
+# ------------------------------------------------------------#
+  SecurityGroupEKS:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EKS Cluster Security Group
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${PJPrefix}-EKS-Cluster-SG
+        - Key: Name
+          Value: !Sub ${PJPrefix}-EKS-Cluster-SG
+
+  SecurityGroupIngress1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt SecurityGroupEKS.GroupId
+      IpProtocol: "-1"
+      SourceSecurityGroupId: !GetAtt SecurityGroupEKS.GroupId
+
+  SecurityGroupEgress1:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !GetAtt SecurityGroupEKS.GroupId
+      IpProtocol: "-1"
+      CidrIp: "0.0.0.0/0"
+
+# ------------------------------------------------------------#
+# NAT Gateway
+# ------------------------------------------------------------#
+  NATGatewayEIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${PJPrefix}-NATGateway-EIP-1
+
+  # NATGatewayEIP2:
+  #   Type: AWS::EC2::EIP
+  #   Properties:
+  #     Domain: VPC
+  #     Tags:
+  #       - Key: Name
+  #         Value: !Sub ${PJPrefix}-NATGateway-EIP-2
+
+  NATGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        !GetAtt NATGatewayEIP1.AllocationId
+      SubnetId:
+        !Ref PublicSubnetA
+      Tags:
+        - Key: Name
+          Value: !Sub ${PJPrefix}-PublicSubnetA-NATGateway
+
+  # NATGateway2:
+  #   Type: AWS::EC2::NatGateway
+  #   Properties:
+  #     AllocationId:
+  #       !GetAtt NATGatewayEIP2.AllocationId
+  #     SubnetId:
+  #       !Ref PublicSubnetC
+  #     Tags:
+  #       - Key: Name
+  #         Value: !Sub ${PJPrefix}-PublicSubnetC-NATGateway
+
+# ------------------------------------------------------------#
+# Output Parameters
+# ------------------------------------------------------------#
+Outputs:
+# VPC
+  VPC:
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "${PJPrefix}-vpc"
+
+  VPCCIDR:
+    Value: !Ref VPCCIDR
+    Export:
+      Name: !Sub "${PJPrefix}-vpc-cidr"
+
+# Subnet
+  PublicSubnetA:
+    Value: !Ref PublicSubnetA
+    Export:
+      Name: !Sub "${PJPrefix}-public-subnet-a"
+
+  PublicSubnetACIDR:
+    Value: !Ref PublicSubnetACIDR
+    Export:
+      Name: !Sub "${PJPrefix}-public-subnet-a-cidr"
+
+  PublicSubnetC:
+    Value: !Ref PublicSubnetC
+    Export:
+      Name: !Sub "${PJPrefix}-public-subnet-c"
+
+  PublicSubnetCCIDR:
+    Value: !Ref PublicSubnetCCIDR
+    Export:
+      Name: !Sub "${PJPrefix}-public-subnet-c-cidr"
+
+  PrivateSubnetA:
+    Value: !Ref PrivateSubnetA
+    Export:
+      Name: !Sub "${PJPrefix}-private-subnet-a"
+
+  PrivateSubnetACIDR:
+    Value: !Ref PrivateSubnetACIDR
+    Export:
+      Name: !Sub "${PJPrefix}-private-subnet-a-cidr"
+
+  PrivateSubnetC:
+    Value: !Ref PrivateSubnetC
+    Export:
+      Name: !Sub "${PJPrefix}-private-subnet-c"
+
+  PrivateSubnetCCIDR:
+    Value: !Ref PrivateSubnetCCIDR
+    Export:
+      Name: !Sub "${PJPrefix}-private-subnet-c-cidr"
+
+# Route
+  PublicRouteTable:
+    Value: !Ref PublicRouteTable
+    Export:
+      Name: !Sub "${PJPrefix}-public-route-a"
+
+  PrivateRouteTable:
+    Value: !Ref PrivateRouteTable
+    Export:
+      Name: !Sub "${PJPrefix}-private-route-a"
+
+  # SG
+  SecurityGroupEKS:
+    Value: !Ref SecurityGroupEKS
+    Export:
+      Name: !Sub "${PJPrefix}-SecurityGroupEKS"
+
+

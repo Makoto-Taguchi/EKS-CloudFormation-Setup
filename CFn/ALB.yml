@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "ALB Create"
+
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: "Project Name Prefix"
+        Parameters:
+          - PJPrefix
+Parameters:
+  PJPrefix:
+    Type: String
+
+Resources:
+  # ------------------------------------------------------------#
+  #  ALB Security Group
+  # ------------------------------------------------------------#
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${PJPrefix}-alb-sg
+      GroupDescription: Allow HTTP access from internet
+      VpcId: { "Fn::ImportValue": !Sub "${PJPrefix}-vpc" }
+      SecurityGroupIngress:
+        # http
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: Name
+          Value: !Sub ${PJPrefix}-alb-sg
+  # ------------------------------------------------------------#
+  #  ALB
+  # ------------------------------------------------------------#
+  InternetALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${PJPrefix}-alb
+      Tags:
+        - Key: Name
+          Value: !Sub ${PJPrefix}-alb
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: false
+        - Key: routing.http2.enabled
+          Value: true
+        - Key: routing.http.drop_invalid_header_fields.enabled
+          Value: false
+        - Key: idle_timeout.timeout_seconds
+          Value: 60
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Subnets:
+        - { "Fn::ImportValue": !Sub "${PJPrefix}-public-subnet-a" }
+        - { "Fn::ImportValue": !Sub "${PJPrefix}-public-subnet-c" }
+      Type: application
+  # ------------------------------------------------------------#
+  #  Target Group
+  # ------------------------------------------------------------#
+  lbTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: { "Fn::ImportValue": !Sub "${PJPrefix}-vpc" }
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: "/index.html"
+      HealthCheckPort: "traffic-port"
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode: '200'
+      TargetType: ip
+      Port: 80
+      Protocol: HTTP
+      # Targets:
+      #   - Id: !Ref WebServer
+      #     Port: 80
+      UnhealthyThresholdCount: 5
+      Tags:
+        - Key: Name
+          Value: !Sub ${PJPrefix}-alb-tg
+      TargetGroupAttributes:
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: 300
+        - Key: "stickiness.enabled"
+          Value: false
+        - Key: "stickiness.type"
+          Value: lb_cookie
+        - Key: "stickiness.lb_cookie.duration_seconds"
+          Value: 86400
+  # ------------------------------------------------------------#
+  #  Listener
+  # ------------------------------------------------------------#
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref lbTargetGroup
+      LoadBalancerArn: !Ref InternetALB
+      Port: 80
+      Protocol: HTTP
+
+Outputs:
+  # SG
+  SecurityGroupALBId:
+    Value: !Ref ALBSecurityGroup
+    Export:
+      Name: !Sub "${PJPrefix}-SecurityGroupALB"
+
+  TargetGroupArn:
+    Value: !Ref lbTargetGroup
+    Export:
+      Name: !Sub "${PJPrefix}-TargetGroup"
