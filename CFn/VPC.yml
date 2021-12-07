@@ -20,6 +20,7 @@ Metadata:
           - PublicSubnetCCIDR
           - PrivateSubnetACIDR
           - PrivateSubnetCCIDR
+          - PrivateSubnetBastionCIDR
 
 Parameters:
   PJPrefix:
@@ -41,6 +42,9 @@ Parameters:
   PrivateSubnetCCIDR:
     Type: String
     Default: "10.1.112.0/24"
+  PrivateSubnetBastionCIDR:
+    Type: String
+    Default: "10.1.120.0/24"
 
 Resources:
 # ------------------------------------------------------------#
@@ -132,6 +136,17 @@ Resources:
         - Key: !Sub kubernetes.io/cluster/${EKSClusterName}
           Value: owned
 
+# Private Subnet for EC2Bastion Create
+  PrivateSubnetBastion:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: "ap-northeast-1a"
+      CidrBlock: !Ref PrivateSubnetBastionCIDR
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${PJPrefix}-private-subnet-Bastion
+
 # ------------------------------------------------------------#
 #  RouteTable
 # ------------------------------------------------------------#
@@ -202,9 +217,17 @@ Resources:
       SubnetId: !Ref PrivateSubnetC
       RouteTableId: !Ref PrivateRouteTable
 
+# PrivateRouteTable Associate SubnetBastion
+  PrivateSubnetCRouteTableAssociation: 
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties: 
+      SubnetId: !Ref PrivateSubnetBastion
+      RouteTableId: !Ref PrivateRouteTable
+
 # ------------------------------------------------------------#
 # Security Group
 # ------------------------------------------------------------#
+# SG for EKS Cluster
   SecurityGroupEKS:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -213,22 +236,66 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${PJPrefix}-EKS-Cluster-SG
-        - Key: Name
-          Value: !Sub ${PJPrefix}-EKS-Cluster-SG
 
-  SecurityGroupIngress1:
+  SecurityGroupEKSIngress1:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       GroupId: !GetAtt SecurityGroupEKS.GroupId
       IpProtocol: "-1"
       SourceSecurityGroupId: !GetAtt SecurityGroupEKS.GroupId
 
-  SecurityGroupEgress1:
+  SecurityGroupEKSIngress2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt SecurityGroupEKS.GroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !GetAtt SecurityGroupBastion.GroupId
+
+  SecurityGroupEKSEgress1:
     Type: AWS::EC2::SecurityGroupEgress
     Properties:
       GroupId: !GetAtt SecurityGroupEKS.GroupId
       IpProtocol: "-1"
       CidrIp: "0.0.0.0/0"
+
+# SG for EC2 Bastion
+  SecurityGroupBastion:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EKS Cluster Security Group
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${PJPrefix}-EC2-Bastion-SG
+
+  SecurityGroupBastionIngress1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt SecurityGroupBastion.GroupId
+      IpProtocol: "-1"
+      SourceSecurityGroupId: !GetAtt SecurityGroupBastion.GroupId
+
+  SecurityGroupBastionEgress1:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !GetAtt SecurityGroupBastion.GroupId
+      IpProtocol: "-1"
+      CidrIp: "0.0.0.0/0"
+
+# ------------------------------------------------------------#
+# S3Endpoint
+# ------------------------------------------------------------#
+# セッションマネージャーでEC2に接続するために必要
+  EndpointS3:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      VpcId: !Ref VPC
 
 # ------------------------------------------------------------#
 # NAT Gateway
@@ -327,6 +394,16 @@ Outputs:
     Export:
       Name: !Sub "${PJPrefix}-private-subnet-c-cidr"
 
+  PrivateSubnetCBastionCIDR:
+    Value: !Ref PrivateSubnetBastion
+    Export:
+      Name: !Sub "${PJPrefix}-private-subnet-bastion"
+
+  PrivateSubnetBastionCIDR:
+    Value: !Ref PrivateSubnetBastionCIDR
+    Export:
+      Name: !Sub "${PJPrefix}-private-subnet-bastion-cidr"
+
 # Route
   PublicRouteTable:
     Value: !Ref PublicRouteTable
@@ -344,4 +421,14 @@ Outputs:
     Export:
       Name: !Sub "${PJPrefix}-SecurityGroupEKS"
 
+  SecurityGroupBastion:
+    Value: !Ref SecurityGroupBastion
+    Export:
+      Name: !Sub "${PJPrefix}-SecurityGroupBastion"
+
+# NATGateway
+  NATGW1:
+    Value: !Ref NATGateway1
+    Export:
+      Name: !Sub "${PJPrefix}-nat-gateway-1"
 

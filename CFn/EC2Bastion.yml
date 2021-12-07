@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "VPC and Subnet Create"
+
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: "Project Name Prefix"
+        Parameters:
+          - PJPrefix
+      - Label:
+          default: "Network Configuration"
+        Parameters:
+          - EC2SubnetId
+          - EC2SecurityGroupIds
+
+Parameters:
+  PJPrefix:
+    Type: String
+  EC2SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  EC2SecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+
+Resources:
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${PJPrefix}-EC2Role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonSSMDirectoryServiceAccess
+      Policies:
+        - PolicyName: !Sub ${PJPrefix}-EC2-EKSPolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "eks:*"
+                Resource:
+                  - "*"
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+        - !Ref EC2Role
+
+  PublicSubnetEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      # Amazon Linux 2
+      ImageId: ami-0218d08a1f9dac831
+      InstanceType: t2.micro
+      SubnetId: !Ref EC2SubnetId
+      SecurityGroupIds: !Ref EC2SecurityGroupIds
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      BlockDeviceMappings:
+        - DeviceName:  "/dev/xvda"
+          Ebs:
+            VolumeType: gp2
+            Encrypted: true
+            VolumeSize: 8
+      Tags:
+        - Key: Name
+          Value: !Sub ${PJPrefix}-EC2Bastion

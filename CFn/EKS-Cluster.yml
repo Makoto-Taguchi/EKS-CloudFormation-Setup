@@ -12,11 +12,11 @@ Metadata:
           default: EKS Cluster Configuration
         Parameters:
           - EKSClusterName
-          # - EKSClusterSecurityGroupId1
-          # - EKSClusterSubnetId1
-          # - EKSClusterSubnetId2
-          # - EKSClusterSubnetId3
-          # - EKSClusterSubnetId4
+          - EKSClusterSecurityGroupIds
+          - EKSClusterSubnetId1
+          - EKSClusterSubnetId2
+          - EKSClusterSubnetId3
+          - EKSClusterSubnetId4
           - EKSVersion
 
 Parameters:
@@ -25,16 +25,16 @@ Parameters:
   EKSClusterName:
     Description: "Same as EKSClusterName which you input in VPC template."
     Type: String
-  # EKSClusterSecurityGroupId1:
-  #   Type: String
-  # EKSClusterSubnetId1:
-  #   Type: String
-  # EKSClusterSubnetId2:
-  #   Type: String
-  # EKSClusterSubnetId3:
-  #   Type: String
-  # EKSClusterSubnetId4:
-  #   Type: String
+  EKSClusterSecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+  EKSClusterSubnetId1:
+    Type: AWS::EC2::Subnet::Id
+  EKSClusterSubnetId2:
+    Type: AWS::EC2::Subnet::Id
+  EKSClusterSubnetId3:
+    Type: AWS::EC2::Subnet::Id
+  EKSClusterSubnetId4:
+    Type: AWS::EC2::Subnet::Id
   EKSVersion:
     Type: String
     Default: "1.20"
@@ -63,13 +63,14 @@ Resources:
     Properties:
       Name: !Ref EKSClusterName
       ResourcesVpcConfig:
-        SecurityGroupIds:
-          - { "Fn::ImportValue": !Sub "${PJPrefix}-SecurityGroupEKS" }
+        SecurityGroupIds: !Ref EKSClusterSecurityGroupIds
         SubnetIds:
-          - { "Fn::ImportValue": !Sub "${PJPrefix}-public-subnet-a" }
-          - { "Fn::ImportValue": !Sub "${PJPrefix}-public-subnet-c" }
-          - { "Fn::ImportValue": !Sub "${PJPrefix}-private-subnet-a" }
-          - { "Fn::ImportValue": !Sub "${PJPrefix}-private-subnet-c" }
+          - !Ref EKSClusterSubnetId1
+          - !Ref EKSClusterSubnetId2
+          - !Ref EKSClusterSubnetId3
+          - !Ref EKSClusterSubnetId4
+        EndpointPublicAccess: false
+        EndpointPrivateAccess: true
       RoleArn: !GetAtt ClusterRole.Arn
       Version: !Ref EKSVersion
 
