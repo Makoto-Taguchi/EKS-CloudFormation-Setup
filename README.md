@@ -4,8 +4,9 @@ AWS Load Balancer ControllerのTargetGroupBindingを利用することで、
 CFnで作成したALBとEKS側で作成したfargate中のdeployment（pod群）を結合する。
 
 ## 構築手順
-### 1. VPC, ALB作成
+### 1. VPC, 踏み台EC2, ALB作成
 CFn/VPC.ymlをデプロイ
+CFn/EC2Bastion.ymlをデプロイ
 CFn/ALB.ymlをデプロイ
 
 ### 2. EKSクラスター作成
