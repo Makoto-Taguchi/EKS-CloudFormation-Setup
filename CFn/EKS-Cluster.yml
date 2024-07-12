@@ -7,7 +7,7 @@ Metadata:
       - Label:
           default: Project Name Prefix
         Parameters:
-          - NamePrefix
+          - PJPrefix
       - Label:
           default: EKS Cluster Configuration
         Parameters:
@@ -20,7 +20,7 @@ Metadata:
           - EKSVersion
 
 Parameters:
-  NamePrefix:
+  PJPrefix:
     Type: String
   EKSClusterName:
     Description: "Same as EKSClusterName which you input in VPC template."
@@ -37,13 +37,13 @@ Parameters:
   #   Type: String
   EKSVersion:
     Type: String
-    Default: "1.20"
+    Default: "1.30"
 
 Resources:
   ClusterRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub ${NamePrefix}-EKSCluster-Role
+      RoleName: !Sub ${PJPrefix}-EKSCluster-Role
       AssumeRolePolicyDocument:
         Statement:
           - Action:
